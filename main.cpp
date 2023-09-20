@@ -80,10 +80,22 @@ void getDriveFreeSpace(std::string drive) {
 
 }
 
+void getDriveCommonInfo(std::string drive) {
+    char szVolName[MAX_PATH+1], szFileSysName[MAX_PATH+1];
+    DWORD dwSerialNumber, dwMaxComponentLen, dwFileSysFlags;
+    GetVolumeInformation("C:\\", szVolName, MAX_PATH,
+                         &dwSerialNumber, &dwMaxComponentLen,
+                         &dwFileSysFlags, szFileSysName, sizeof(szFileSysName));
+    std::cout << "Serial Number: " << dwSerialNumber << "\nMax Component Len: " << dwMaxComponentLen << "\nFile System Flags: " << dwFileSysFlags << std::endl;
+}
+
 void getDriveInfo(std::string drive) {
     getDriveType(drive);
     getDriveFreeSpace(drive);
+    getDriveCommonInfo(drive);
 }
+
+
 
 int main() {
     int input = -1;
@@ -132,6 +144,8 @@ int main() {
 
                 break;
             case 6:
+                break;
+            case 7:
                 break;
         }
     }
