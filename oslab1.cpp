@@ -258,6 +258,41 @@ void copyFiles(std::string input_string, std::string input_string_2) {
     }
 }
 
+void createFile(std::string file) {
+    BOOL success =
+            CreateFileA(
+            file.c_str(),	// File name
+            GENERIC_READ | GENERIC_WRITE,	// Read-write
+            FILE_SHARE_READ
+            | FILE_SHARE_WRITE,		// Allow sharing-- we're only doing a quick scan
+            NULL,					// No security attributes
+            CREATE_ALWAYS,			// Create an existing file
+            0,						// Ignore file attributes
+            NULL);					// Ignore hTemplateFile
+    if (!success) {
+        std::cout << "Error creating file" << std::endl;
+    } else {
+        std::cout << "Successfully created file" << std::endl;
+    }
+}
+
+void createDirectory(std::string directory) {
+    BOOL success = CreateDirectoryA(input_string.c_str(), nullptr);
+    if (!success) {
+        std::cout << "Error creating directory" << std::endl;
+    } else {
+        std::cout << "Successfully created directory" << std::endl;
+    }
+}
+
+void removeDirectory(std::string directory) {
+    BOOL success = RemoveDirectoryA(input_string.c_str());
+    if (!success) {
+        std::cout << "Error removing directory" << std::endl;
+    } else {
+        std::cout << "Successfully removed directory" << std::endl;
+    }
+}
 
 // Main function with menu
 int main() {
@@ -288,26 +323,17 @@ int main() {
             case 3:
                 std::cout << "Enter new directory (D:\\folder)" << std::endl;
                 std::cin >> input_string;
-                CreateDirectoryA(input_string.c_str(), nullptr);
+                createDirectory(input_string);
                 break;
             case 4:
                 std::cout << "Enter directory (D:\\folder)" << std::endl;
                 std::cin >> input_string;
-                RemoveDirectoryA(input_string.c_str());
+                removeDirectory(input_string);
                 break;
             case 5:
                 std::cout << "Enter new file (D:\\folder\\file.txt)" << std::endl;
                 std::cin >> input_string;
-                CreateFileA(
-                        input_string.c_str(),	// File name
-                        GENERIC_READ | GENERIC_WRITE,	// Read-write
-                        FILE_SHARE_READ
-                        | FILE_SHARE_WRITE,		// Allow sharing-- we're only doing a quick scan
-                        NULL,					// No security attributes
-                        CREATE_ALWAYS,			// Create an existing file
-                        0,						// Ignore file attributes
-                        NULL);					// Ignore hTemplateFile
-
+                createFile(input_string);
                 break;
             case 6:
                 std::cout << "Enter file to copy (D:\\folder\\file.txt)" << std::endl;
