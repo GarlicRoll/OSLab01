@@ -259,25 +259,26 @@ void copyFiles(std::string input_string, std::string input_string_2) {
 }
 
 void createFile(std::string file) {
-    BOOL success =
-            CreateFileA(
-            file.c_str(),	// File name
-            GENERIC_READ | GENERIC_WRITE,	// Read-write
-            FILE_SHARE_READ
-            | FILE_SHARE_WRITE,		// Allow sharing-- we're only doing a quick scan
-            NULL,					// No security attributes
-            CREATE_ALWAYS,			// Create an existing file
-            0,						// Ignore file attributes
-            NULL);					// Ignore hTemplateFile
-    if (!success) {
-        std::cout << "Error creating file" << std::endl;
-    } else {
-        std::cout << "Successfully created file" << std::endl;
+    HANDLE fileHandle = CreateFileA(
+            file.c_str(),             // File path
+            GENERIC_READ | GENERIC_WRITE, // Read and write access
+            0,                            // No sharing
+            nullptr,                      // No security attributes
+            CREATE_NEW,                   // Create a new file only if it doesn't exist
+            FILE_ATTRIBUTE_NORMAL,        // Normal file attributes
+            nullptr                       // No template file
+    );
+
+    if (fileHandle == INVALID_HANDLE_VALUE) {
+        std::cerr << "Error creating file: " << GetLastError() << std::endl;
     }
+
+    std::cout << "File created successfully." << std::endl;
+    CloseHandle(fileHandle); // Close the file handle
 }
 
 void createDirectory(std::string directory) {
-    BOOL success = CreateDirectoryA(input_string.c_str(), nullptr);
+    BOOL success = CreateDirectoryA(directory.c_str(), nullptr);
     if (!success) {
         std::cout << "Error creating directory" << std::endl;
     } else {
@@ -286,7 +287,7 @@ void createDirectory(std::string directory) {
 }
 
 void removeDirectory(std::string directory) {
-    BOOL success = RemoveDirectoryA(input_string.c_str());
+    BOOL success = RemoveDirectoryA(directory.c_str());
     if (!success) {
         std::cout << "Error removing directory" << std::endl;
     } else {
