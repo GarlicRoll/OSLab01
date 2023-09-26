@@ -3,4 +3,5 @@ project(OSLab01)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_executable(OSLab01 oslab1.cpp)
+add_executable(OSLab01 oslab1_linux.cpp)
+target_link_libraries(OSLab01 PRIVATE pthread)
