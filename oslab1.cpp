@@ -3,6 +3,83 @@
 #include <fileapi.h>
 #include <vector>
 #include <iomanip>
+#include <string>
+
+
+void printLastErrorMessage() {
+    DWORD error_code = GetLastError();
+
+    if (error_code == 0) {
+        std::wcout << L"No error." << std::endl;
+        return;
+    }
+
+    LPWSTR message_buffer;
+    DWORD buffer_length = FormatMessageW(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER |
+            FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+            nullptr,
+            error_code,
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+            (LPWSTR)&message_buffer,
+            0,
+            nullptr
+    );
+
+    if (buffer_length == 0) {
+        std::wcout << L"Failed to retrieve the error message." << std::endl;
+        return;
+    }
+
+    HANDLE console_output = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    if (console_output == INVALID_HANDLE_VALUE) {
+        std::wcout << L"Failed to get console output handle." << std::endl;
+        LocalFree(message_buffer);
+        return;
+    }
+
+    DWORD written;
+    WriteConsoleW(console_output, L"Error message: ", 15, &written, nullptr);
+    WriteConsoleW(console_output, message_buffer, buffer_length, &written, nullptr);
+
+    LocalFree(message_buffer);
+}
+
+void printFileSysFlags(DWORD dwFileSysFlags) {
+    struct FlagDefine {
+        DWORD flag;
+        const char* description;
+    };
+
+    static const FlagDefine file_sys_flags[] = {
+            { FILE_CASE_SENSITIVE_SEARCH, "Case sensitive search" },
+            { FILE_CASE_PRESERVED_NAMES, "Case preserved names" },
+            { FILE_UNICODE_ON_DISK, "Unicode on disk" },
+            { FILE_PERSISTENT_ACLS, "Persistent ACLs" },
+            { FILE_FILE_COMPRESSION, "File compression" },
+            { FILE_VOLUME_QUOTAS, "Volume quotas" },
+            { FILE_SUPPORTS_SPARSE_FILES, "Supports sparse files" },
+            { FILE_SUPPORTS_REPARSE_POINTS, "Supports reparse points" },
+            { FILE_SUPPORTS_REMOTE_STORAGE, "Supports remote storage" },
+            { FILE_VOLUME_IS_COMPRESSED, "Volume is compressed" },
+            { FILE_SUPPORTS_OBJECT_IDS, "Supports object IDs" },
+            { FILE_SUPPORTS_ENCRYPTION, "Supports encryption" },
+            { FILE_NAMED_STREAMS, "Named streams" },
+            { FILE_READ_ONLY_VOLUME, "Read-only volume" },
+            { FILE_SEQUENTIAL_WRITE_ONCE, "Sequential write once" },
+            { FILE_SUPPORTS_TRANSACTIONS, "Supports transactions" },
+    };
+
+    std::cout << "File system flags:" << std::endl;
+
+    for (const auto& flag_def : file_sys_flags) {
+        if (dwFileSysFlags & flag_def.flag) {
+            std::cout << "  - " << flag_def.description << std::endl;
+        }
+    }
+}
 
 std::vector<std::string> getDrives() {
     std::string final = "Drives: \n";
@@ -87,7 +164,8 @@ void getDriveCommonInfo(std::string drive) {
     GetVolumeInformationA(drive.c_str(), szVolName, MAX_PATH,
                          &dwSerialNumber, &dwMaxComponentLen,
                          &dwFileSysFlags, szFileSysName, sizeof(szFileSysName));
-    std::cout << "Serial Number: " << dwSerialNumber << "\nMax Component Len: " << dwMaxComponentLen << "\nFile System Flags: " << dwFileSysFlags << std::endl;
+    std::cout << "Serial Number: " << dwSerialNumber << "\nMax Component Len: " << dwMaxComponentLen << std::endl;
+    printFileSysFlags(dwFileSysFlags);
 }
 
 void getDriveInfo(std::string drive) {
@@ -121,7 +199,8 @@ void getHandleFileAttributes(std::string file) {
     );
 
     if(fileHandle == INVALID_HANDLE_VALUE) {
-        std::cerr << "Error opening file: " << GetLastError() << std::endl;
+        std::cerr << "Error opening file: " << std::endl;
+        printLastErrorMessage();
     }
 
     // Call GetFileInformationByHandle
@@ -129,7 +208,8 @@ void getHandleFileAttributes(std::string file) {
     BOOL success = GetFileInformationByHandle(fileHandle, &fileInfo);
 
     if (!success) {
-        std::cerr << "Error getting file information: " << GetLastError() << std::endl;
+        std::cerr << "Error getting file information: " << std::endl;
+        printLastErrorMessage();
         CloseHandle(fileHandle);
     }
 
@@ -161,7 +241,8 @@ void getFileAttributes(std::string file) {
 
     // Check if the call to GetFileAttributes was successful
     if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
-        std::cerr << "Error getting file attributes: " << GetLastError() << std::endl;
+        std::cerr << "Error getting file attributes: " << std::endl;
+        printLastErrorMessage();
     }
 
     // Print the attributes of the file or directory
@@ -209,7 +290,8 @@ void setCurrentTimeForFile(std::string file) {
     );
 
     if (fileHandle == INVALID_HANDLE_VALUE) {
-        std::cerr << "Error opening file: " << GetLastError() << std::endl;
+        std::cerr << "Error opening file: "  << std::endl;
+        printLastErrorMessage();
     }
 
     // Set the new last write time to the current time
@@ -222,7 +304,8 @@ void setCurrentTimeForFile(std::string file) {
     BOOL success = SetFileTime(fileHandle, nullptr, nullptr, &newLastWriteTime);
 
     if (!success) {
-        std::cerr << "Error setting file time: " << GetLastError() << std::endl;
+        std::cerr << "Error setting file time: " << std::endl;
+        printLastErrorMessage();
         CloseHandle(fileHandle);
     }
 
@@ -238,7 +321,8 @@ void moveFiles(std::string input_string, std::string input_string_2) {
     } else {
         BOOL success = MoveFileA(input_string.c_str(), input_string_2.c_str());
         if (!success) {
-            std::cout << "Error moving files" << std::endl;
+            std::cout << "Error moving files"  << std::endl;
+            printLastErrorMessage();
         } else {
             std::cout << "Successfully moved files" << std::endl;
         }
@@ -251,7 +335,8 @@ void copyFiles(std::string input_string, std::string input_string_2) {
     } else {
         BOOL success = CopyFileA(input_string.c_str(), input_string_2.c_str(), true);
         if (!success) {
-            std::cout << "Error coping files" << std::endl;
+            std::cout << "Error coping files"  <<std::endl;
+            printLastErrorMessage();
         } else {
             std::cout << "Successfully copied files" << std::endl;
         }
@@ -270,7 +355,8 @@ void createFile(std::string file) {
     );
 
     if (fileHandle == INVALID_HANDLE_VALUE) {
-        std::cerr << "Error creating file: " << GetLastError() << std::endl;
+        std::cerr << "Error creating file: " << std::endl;
+        printLastErrorMessage();
     }
 
     std::cout << "File created successfully." << std::endl;
@@ -281,6 +367,7 @@ void createDirectory(std::string directory) {
     BOOL success = CreateDirectoryA(directory.c_str(), nullptr);
     if (!success) {
         std::cout << "Error creating directory" << std::endl;
+        printLastErrorMessage();
     } else {
         std::cout << "Successfully created directory" << std::endl;
     }
@@ -289,7 +376,8 @@ void createDirectory(std::string directory) {
 void removeDirectory(std::string directory) {
     BOOL success = RemoveDirectoryA(directory.c_str());
     if (!success) {
-        std::cout << "Error removing directory" << std::endl;
+        std::cout << "Error removing directory"  << std::endl;
+        printLastErrorMessage();
     } else {
         std::cout << "Successfully removed directory" << std::endl;
     }
