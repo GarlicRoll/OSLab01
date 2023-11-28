@@ -1,175 +1,190 @@
-//
-// Created by gleb on 03.10.23.
-//
-
+#include <iostream>
 #include <aio.h>
 #include <fcntl.h>
-#include <iostream>
-#include <string>
+#include <unistd.h>
 #include <string.h>
-#include <unistd.h>
-#include <chrono>
-#include <fcntl.h>
-#include <unistd.h>
-#include <signal.h>
 #include <errno.h>
+#include <signal.h>
+
 #include <sys/stat.h>
+
 #include <vector>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <strings.h>
-#include <cassert>
+#include <chrono>
 
 using namespace std;
 
+off_t  block_size = 4096;
+int cnt_aio, file_size;
+int cnt_end_aio = 0;
+long increment;
 
-string getFileName() {
-    string inputName;
-    cout << "Enter file name (/home/username/folder/file.txt): ";
-    cin >> inputName;
-    return inputName;
-}
+struct aio_operation {
+    struct aiocb aio;
+    char *buffer;
+    int write_operation;
+    struct aio_operation* next_operation;
+};
 
 void getLastError() {
-    const char *errorString = strerror(errno);
-    cerr << "Error: " << errorString << endl;
+    const char *error_string = strerror(errno);
+    cerr << "Error: " << error_string << endl;
 }
 
-int openFile(string *fileName){
-    int file;
-    file = open(reinterpret_cast<const char *>(fileName), O_RDONLY|O_NONBLOCK, 0666);
-    if (file == -1) {
+void aio_completion_handler(sigval_t sigval) {
+//    cout << "1" << endl;
+    struct aio_operation *aio_op = (struct aio_operation *)sigval.sival_ptr;
+    struct aio_operation *next = aio_op->next_operation;
+    aio_op->aio.aio_offset += increment;
+    if (aio_op->write_operation) {
+        to_string(*aio_op->buffer).clear();
+        // операция записи
+        file_size = file_size - aio_return(&aio_op->aio);
+//        cout << "File size: " << file_size << endl;
+        if (file_size <= block_size) {
+            aio_op->aio.aio_nbytes = file_size;
+            next->aio.aio_nbytes = file_size;
+        }
+//        cout << "Offset: " << aio_op->aio.aio_offset << " " << next->aio.aio_offset << endl;
+        if (aio_read(&next->aio) == -1) {
+            getLastError();
+        }
+    } else {
+        long read_return = aio_return(&aio_op->aio);
+//        cout << "Read: " << read_return << endl;
+        //операция чтения
+        if (read_return > 0) {
+            if (aio_write(&next->aio) == -1) {
+                getLastError();
+            }
+        }
+        else {
+            cnt_end_aio += 1;
+        }
+    }
+}
+
+string getFileName() {
+    string input_name;
+    cout << "Enter file name (/home/username/folder/file.txt): ";
+    cin >> input_name;
+    return input_name;
+}
+
+int main() {
+    int cnt_block;
+    int read_fd, write_fd; /* Файловый дескриптор */
+    string read_filename, write_filename;
+    struct stat read_stat{};
+
+    cout << "Count data blocks: ";
+    cin >> cnt_block;
+
+    cout << "Count asynchronous operation: ";
+    cin >> cnt_aio;
+
+    block_size = block_size * cnt_block;
+
+    increment = block_size * cnt_aio;
+//    cout << increment << endl;
+
+    vector<aiocb> aiocb_read_list, aiocb_write_list;
+    vector<string> buf_list;
+    vector<aio_operation> aio_op_list(cnt_aio * 2);
+
+    cout << "Read file name" << endl;
+    read_filename = "/mnt/d/Downloads/test_video.mkv"; //getFileName();
+
+    read_fd = open(read_filename.c_str(), O_RDONLY|O_NONBLOCK, 0666);
+    if (read_fd == -1) {
         getLastError();
     }
     else {
         cout << "File open successfully!" << endl;
-    }
-    return file;
-}
 
-int createFile(string *file_name) {
-    int file;
-    file = open(reinterpret_cast<const char *>(file_name), O_CREAT | O_WRONLY | O_TRUNC | O_NONBLOCK, 0666);
-    if (file == -1) {
-        getLastError();
-    }
-    else {
-        cout << "File create successfully!" << endl;
-    }
-    return file;
-}
+        cout << "Write file name" << endl;
+        write_filename = "/mnt/d/Downloads/test_video_COPIED.mkv"; //getFileName();
 
-
-int main() {
-
-
-    ///////////////
-    ////////////// Reading
-    //////////////
-
-
-
-    int blockSize = 40960;
-    cout << "Enter block size (in bytes): ";
-    cin >> blockSize;
-
-
-    int file = openFile((string *) getFileName().c_str());
-    struct stat st;
-    if (fstat(file, &st) == -1) {
-        perror("fstat");
-        return 1;
-    }
-    off_t fileSize = st.st_size;
-
-    int nBlocks = fileSize / blockSize;
-    if (fileSize % blockSize != 0) {
-        ++nBlocks;
-    }
-
-    vector<aiocb> blocks(nBlocks);
-    vector<char*> buffers(nBlocks);
-
-    auto start1 = chrono::high_resolution_clock::now();
-
-    for (int i = 0; i < nBlocks; i++) {
-        aiocb readBlock{};
-        char* readBuffer = new char[blockSize];  // dynamically allocated
-        memset(readBuffer, ' ', blockSize);      // fill the buffer with spaces
-
-        readBlock.aio_fildes = file;
-        readBlock.aio_buf = readBuffer;          // assign the allocated buffer
-        readBlock.aio_nbytes = blockSize;
-        readBlock.aio_offset = i * blockSize;
-
-        buffers[i] = readBuffer;                 // save the pointer to the buffer
-        blocks[i] = readBlock;
-
-
-    }
-
-    for (int i = 0; i < nBlocks; i++) {
-        if (aio_read(&blocks[i]) == -1) {
-            perror("aio_read");
-            exit(1);
+        write_fd = open(write_filename.c_str(), O_CREAT | O_WRONLY | O_TRUNC | O_NONBLOCK, 0666);
+        if (write_fd == -1) {
+            getLastError();
         }
-    }
+        else {
+            cout << "File create successfully!" << endl;
 
-    //waitForAll(blocks); // do i need it
-    // Wait for all I/O operations to complete
-    for (int i = 0; i < nBlocks; i++) {
-        const struct aiocb *aiocb_list[] = { &blocks[i] };
-        aio_suspend(aiocb_list, nBlocks, NULL);
-    }
+            fstat(read_fd, &read_stat);
 
-    auto end1 = chrono::high_resolution_clock::now();
+            file_size = read_stat.st_size;
 
-    ///////////////////
-    /////////////////// Writing
-    //////////////////
+            for (int i = 0; i < cnt_aio * 2; i++) {
+                memset(&aio_op_list[i], 0, sizeof(aio_operation));
 
-    file = createFile((string *) getFileName().c_str());
+                if (i % 2 == 0) {
+                    aiocb_read_list.push_back(aiocb());
+                    memset(&aiocb_read_list[i/2], 0, sizeof(aiocb));
+                    aiocb_read_list[i/2].aio_fildes = read_fd;
 
-    auto start2 = chrono::high_resolution_clock::now();
+                    aio_op_list[i].write_operation = 0;
+                    aio_op_list[i].next_operation = &aio_op_list[i + 1];
 
-    for (int i = 0; i < nBlocks; i++) {
-        aiocb readBlock{};
-        //char* readBuffer = new char[blockSize];  // dynamically allocated
-        //memset(readBuffer, ' ', blockSize);      // fill the buffer with spaces
+                    buf_list.push_back(string());
+                    buf_list[i / 2] = string(block_size, ' ');
+                    buf_list[i / 2].clear();
 
-        readBlock.aio_fildes = file;
-        readBlock.aio_buf = blocks[i].aio_buf;          // assign the allocated buffer
-        readBlock.aio_nbytes = blockSize;
-        readBlock.aio_offset = i * blockSize;
+                    aiocb_read_list[i/2].aio_buf = (void *)buf_list[i / 2].c_str();
+                    aiocb_read_list[i/2].aio_nbytes = block_size;
+                    aiocb_read_list[i/2].aio_offset = block_size * (i / 2);
+                    // cout << "Read offset " << aiocb_read_list[i/2].aio_offset << endl;
+                    aiocb_read_list[i/2].aio_sigevent.sigev_notify = SIGEV_THREAD;
+                    aiocb_read_list[i/2].aio_sigevent.sigev_value.sival_ptr = &aio_op_list[i];
+                    aiocb_read_list[i/2].aio_sigevent.sigev_notify_function = aio_completion_handler;
+                    aiocb_read_list[i/2].aio_sigevent.sigev_notify_attributes = nullptr;
 
-        //buffers[i] = readBuffer;                 // save the pointer to the buffer
-        blocks[i] = readBlock;
+                    aio_op_list[i].aio = aiocb_read_list[i/2];
+                }
+                else {
+                    aiocb_write_list.push_back(aiocb());
+                    memset(&aiocb_write_list[i/2], 0, sizeof(aiocb));
+                    aiocb_write_list[i/2].aio_fildes = write_fd;
+                    aio_op_list[i].write_operation = 1;
 
-    }
+                    aio_op_list[i].next_operation = &aio_op_list[i - 1];
 
-    for (int i = 0; i < nBlocks; i++) {
-        if (aio_write(&blocks[i]) == -1) {
-            perror("aio_write");
-            exit(1);
+                    aiocb_write_list[i/2].aio_buf = (void *)buf_list[i / 2].c_str();
+                    aiocb_write_list[i/2].aio_nbytes = block_size;
+                    aiocb_write_list[i/2].aio_offset = block_size * (i / 2);
+                    // cout << "Write offset " << aiocb_write_list[i/2].aio_offset << endl;
+                    aiocb_write_list[i/2].aio_sigevent.sigev_notify = SIGEV_THREAD;
+                    aiocb_write_list[i/2].aio_sigevent.sigev_value.sival_ptr = &aio_op_list[i];
+                    aiocb_write_list[i/2].aio_sigevent.sigev_notify_function = aio_completion_handler;
+                    aiocb_write_list[i/2].aio_sigevent.sigev_notify_attributes = nullptr;
+
+                    aio_op_list[i].aio = aiocb_write_list[i/2];
+                }
+                aio_op_list[i].buffer = (char *)buf_list[i / 2].c_str();
+            }
+
+            auto start = chrono::high_resolution_clock::now();  // timer start
+
+            for (int i = 0; i < cnt_aio * 2; i = i + 2) {
+                if (aio_read(&aio_op_list[i].aio) == -1) {
+                    getLastError();
+                }
+            }
+
+            while (cnt_end_aio != cnt_aio) {
+                usleep(10000);
+            }
+
+            auto end = chrono::high_resolution_clock::now(); // timer stop
+
+            chrono::duration<double> elapsed = end - start;
+            cout << "Coping operation took: " << elapsed.count() << " seconds.\n";
+
+            close(write_fd);
         }
+
+        close(read_fd);
     }
-
-    //waitForAll(blocks); // do i need it
-    // Wait for all I/O operations to complete
-    for (int i = 0; i < nBlocks; i++) {
-        const struct aiocb *aiocb_list[] = { &blocks[i] };
-        aio_suspend(aiocb_list, nBlocks, NULL);
-    }
-
-    auto end2 = chrono::high_resolution_clock::now();
-
-    printf("Block Size: %i\nCount Of Blocks: %i\n", blockSize, nBlocks);
-
-    chrono::duration<double> elapsed1 = end1 - start1;
-    chrono::duration<double> elapsed2 = end2 - start2;
-    std::cout << "Coping operation took: " << elapsed1.count() + elapsed2.count() << " seconds.\n";
 
     return 0;
 }
